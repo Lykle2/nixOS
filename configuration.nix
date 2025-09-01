@@ -2,31 +2,27 @@
 # your system.  Help is available in the configuration.nix(5) man page
 # and in the NixOS manual (accessible by running ‘nixos-help’).
 
-{ config, pkgs, ... }:
+{ config, pkgs, inputs, ... }:
 
 {
   imports =
     [ # Include the results of the hardware scan.
       ./hardware-configuration.nix
-      #inputs.home-manager.nixosModules.default
+      ./flatpak.nix
     ];
-
-  # Flakes.
-  nix.settings.experimental-features = [ "nix-command" "flakes"];
 
   # Bootloader.
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
+  boot.loader.systemd-boot.configurationLimit = 5; # Limit configurations shown on boot menu.
+  boot.plymouth.enable = true; # Enable boot logo and loading screen when booting.
 
-  # Boot with Nix Logo.
-  boot.plymouth.enable = true;
+  # Enable flakes.
+  nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
-  # Enable networking
-  networking.networkmanager.enable = true;
   networking.hostName = "nixos"; # Define your hostname.
 
-  # Enable bluetooth
-  hardware.bluetooth.enable = true;
+  # // KTL // (Keymap, Timezone, Locale)
 
   # Set your time zone.
   time.timeZone = "America/New_York";
@@ -46,30 +42,29 @@
     LC_TIME = "en_US.UTF-8";
   };
 
-  # Enable the X11 windowing system.
-  services.xserver.enable = false;
+  # Configure keymap in X11
+  services.xserver.xkb = {
+    layout = "us";
+    variant = "";
+  };
 
-  # Enable the GNOME Desktop Environment and removes most core applications.
+  # // BASIC SERVICES //
+  
+  # Enable networking.
+  networking.networkmanager.enable = true;
+
+  # Enable X11 windowing system and GNOME Desktop Environment.
+  services.xserver.enable = false;
   services.displayManager.gdm.enable = true;
   services.desktopManager.gnome.enable = true;
 
-  # Disabled packages/services.
-  services.printing.enable = false; # Disables Printing.
-  services.gnome.core-apps.enable = false; # Disables Core Gnome Apps
-  environment.gnome.excludePackages = with pkgs; [ # Disables Gnome Tour
-    gnome-tour
-  ];
-  services.xserver.excludePackages = [ pkgs.xterm ]; # Disables XTerm
+  # Enable ratbagd for pkgs.piper
+  services.ratbagd.enable = true;
 
-  # Enable Flatpak
-  services.flatpak.enable = true;
-  systemd.services.flatpak-repo = {
-    wantedBy = [ "multi-user.target"];
-    path = [pkgs.flatpak];
-    script = ''
-      flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-    '';
-  };
+  # Disable unused services.
+  services.gnome.core-apps.enable = false;
+  environment.gnome.excludePackages = [ pkgs.gnome-tour ];
+  services.printing.enable = false;
 
   # Enable sound with pipewire.
   services.pulseaudio.enable = false;
@@ -78,41 +73,105 @@
     enable = true;
     alsa.enable = true;
     alsa.support32Bit = true;
-    pulse.enable = true;    
+    pulse.enable = true;
   };
+
+  # // PACKAGES / PROGRAMS
+
+  # Allow unfree packages.
+  nixpkgs.config.allowUnfree = true;
 
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.users.lykle = {
     isNormalUser = true;
     description = "Lykle";
+    shell = pkgs.fish;
     extraGroups = [ "networkmanager" "wheel" ];
-    hashedPassword = "$2b$05$4mSzKCquskY9.4qGV66D7.NKfl.7qADU/jbWs9Sv3SzmtnOBQQu7m";
+    hashedPassword = "$2b$05$kJV9j8Yiptocft.1T9ycseNuMlF7heEVAflT1Y.lq0X2wihPRFRl2";
     packages = with pkgs; [
-    librewolf
-    vesktop
-    steam
-    lutris
-    obs-studio
-    prismlauncher
-    fastfetch
-    nautilus
-    audacity
-    bitwarden
-    refine 
+      audacity
+      bitwarden
+      gnome-calculator
+      gnome-music
+      errands
+      evince
+      fragments
+      gimp
+      gnome-connections
+      gnome-extension-manager
+      impression
+      kdePackages.kdenlive
+      lunar-client
+      lutris
+      obs-studio
+      openconnect
+      planify
+      prismlauncher
+      mullvad-vpn
+      snapshot
+      vesktop
+      virt-manager
+      vlc
+      vscode
+      yt-dlp
+      zoom-us
     ];
   };
 
-  # To search, run: $ nix search wget
+  services.flatpak.enable = true;
+  programs.dconf.enable = true;
+  programs.fish.enable = true;
+  programs.steam.enable = true;
+  programs.virt-manager.enable = true;
+
+  # List packages installed in system profile. To search, run:
+  # $ nix search wget
+
   environment.systemPackages = with pkgs; [
-  vim
-  git 
-  wget
+  fastfetch
+  ghostty
+  git
+  #gnome-console
+  gnome-disk-utility
+  gnome-text-editor
+  #go
   htop
-  lf
   man
-  gnome-software
-  gnome-console
+  nixd
+  nautilus
+  neovim
+  #lynx
+  piper
+  python3
+  refine
+  wget
+  yazi
+
+  # Virtualization Packages
+  bridge-utils
+  libvirt
+  OVMF
+  qemu_kvm
+  qemu-utils
   ];
+
+  # // Virtualization//
+
+  users.groups.libvirtd.members = [ "lykle" ];
+  virtualisation.libvirtd.enable = true;
+  virtualisation.spiceUSBRedirection.enable = true;
+
+  # // MAINTENANCE //
+
+  # Garbage Collecting
+   nix.gc = {
+    automatic = true;
+    dates = "weekly";
+    options  = "--delete-older-than +5";
+  };
+  nix.settings.auto-optimise-store = true;
+
+  # Next Maintenance Commands Here.
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions
@@ -121,20 +180,5 @@
   # Before changing this value read the documentation for this option
   # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
   system.stateVersion = "25.05"; # Did you read the comment?
-  nixpkgs.config.allowUnfree = true;
- 
-  /* MAINTENANCE */
-  
-  nix.gc = {
-    automatic = true; 
-    options  = "--delete +10";
-  };
- 
-  /* UNUSED */
-  
-  # Open ports in the firewall.
-  # networking.firewall.allowedTCPPorts = [ ... ];
-  # networking.firewall.allowedUDPPorts = [ ... ];
-  # Or disable the firewall altogether.
-  # networking.firewall.enable = false;
+
 }
